@@ -1,0 +1,403 @@
+---
+title: "Analysis"
+output:
+  pdf_document:
+    latex_engine: xelatex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Behavioural Research Statistical Analysis
+
+## Testing Event Boundary Memory Hypotheses
+
+This notebook analyses the cleaned recognition dataset to test three hypotheses regarding memory performance under **Natural Cut (NB)** and **Abrupt Cut (AB)** conditions.
+
+Additionally, two cognitive memory metrics are computed:
+
+* **Recognition Memory Index (REC)**
+* **Lure Discrimination Index (LDI)**
+
+---
+
+# Load Libraries
+
+```{r}
+library(tidyverse)
+library(stringr)
+```
+
+---
+
+# Load Clean Dataset
+
+```{r}
+data <- read.csv("final_cleaned_recognition_data.csv", check.names = FALSE)
+
+# Convert variables
+
+data$Condition <- factor(data$`AB/NB`)
+data$Frames <- factor(data$Frames)
+data$Subject_id <- factor(data$Subject_id)
+
+# Accuracy and RT
+
+data$accuracy <- as.numeric(data$resp.corr)
+data$rt <- as.numeric(data$resp.rt)
+```
+
+---
+
+# Hypothesis 1
+
+## NB participants should show higher accuracy and faster RT
+
+## Participant-level summary
+
+```{r}
+summary_data <- data %>%
+  group_by(Subject_id, Condition) %>%
+  summarise(
+    mean_accuracy = mean(accuracy, na.rm = TRUE),
+    mean_rt = mean(rt, na.rm = TRUE),
+    .groups = "drop"
+  )
+```
+
+---
+
+## Statistical Tests
+
+```{r}
+# Accuracy comparison
+t.test(mean_accuracy ~ Condition, data = summary_data)
+
+# Reaction time comparison
+t.test(mean_rt ~ Condition, data = summary_data)
+```
+
+---
+
+## Visualization
+
+### Recognition Accuracy by Condition
+
+```{r}
+ggplot(summary_data, aes(x = Condition, y = mean_accuracy, fill = Condition)) +
+  stat_summary(fun = mean, geom = "bar") +
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2) +
+  labs(title = "Recognition Accuracy by Condition",
+       x = "Condition",
+       y = "Mean Accuracy") +
+  theme_minimal()
+```
+
+### Reaction Time Distribution
+
+```{r}
+ggplot(summary_data, aes(x = Condition, y = mean_rt, fill = Condition)) +
+  geom_violin(trim = FALSE, alpha = 0.7) +
+  geom_boxplot(width = 0.1, fill = "white") +
+  labs(title = "Reaction Time Distribution",
+       x = "Condition",
+       y = "Reaction Time (seconds)") +
+  theme_minimal()
+```
+
+---
+
+# Hypothesis 2
+
+## BB frames should show higher accuracy in NB compared to AB
+
+```{r}
+frame_summary <- data %>%
+  group_by(Subject_id, Condition, Frames) %>%
+  summarise(
+    mean_accuracy = mean(accuracy, na.rm = TRUE),
+    .groups = "drop"
+  )
+```
+
+---
+
+## Two-way ANOVA
+
+```{r}
+anova_result <- aov(mean_accuracy ~ Condition * Frames, data = frame_summary)
+summary(anova_result)
+```
+
+---
+
+## Visualization
+
+```{r}
+ggplot(frame_summary, aes(x = Frames, y = mean_accuracy, fill = Condition)) +
+  stat_summary(fun = mean, geom = "bar", position = "dodge") +
+  stat_summary(fun.data = mean_se,
+               geom = "errorbar",
+               position = position_dodge(0.9),
+               width = 0.2) +
+  labs(title = "Accuracy by Frame Type and Condition",
+       x = "Frame Type",
+       y = "Mean Accuracy") +
+  theme_minimal()
+```
+
+---
+
+# Hypothesis 3
+
+## EM frames should not differ significantly between conditions
+
+```{r}
+em_data <- frame_summary %>%
+  filter(Frames == "EM")
+
+# t-test
+t.test(mean_accuracy ~ Condition, data = em_data)
+```
+
+---
+
+# Confidence vs Correctness
+
+```{r}
+ggplot(data, aes(x = factor(accuracy), y = confidence)) +
+  geom_violin(trim = FALSE, fill = "skyblue") +
+  geom_boxplot(width = 0.1, fill = "white") +
+  labs(title = "Confidence vs Correctness",
+       x = "Correct (1) vs Incorrect (0)",
+       y = "Confidence") +
+  theme_minimal()
+```
+
+---
+
+# Recognition Memory Metrics
+
+## Recognition Memory Index (REC)
+
+Formula:
+
+REC = P("old" | Target) − P("old" | Foil)
+
+```{r}
+# Probability participant correctly identified target
+p_old_target <- mean(data$resp.corr == 1, na.rm = TRUE)
+
+# Probability participant incorrectly identifies foil
+p_old_foil <- mean(data$resp.corr == 0, na.rm = TRUE)
+
+REC <- p_old_target - p_old_foil
+
+REC
+```
+
+---
+
+# Lure Discrimination Index (LDI)
+
+Formula:
+
+LDI = P("similar" | Lure) − P("similar" | Foil)
+
+```{r}
+# Example approximation using frame types
+p_similar_lure <- mean(data$Frames == "BB" & data$accuracy == 0, na.rm = TRUE)
+p_similar_foil <- mean(data$Frames == "EM" & data$accuracy == 0, na.rm = TRUE)
+
+LDI <- p_similar_lure - p_similar_foil
+
+LDI
+```
+
+---
+
+# Summary
+
+This analysis tested three hypotheses:
+
+1. **Natural cut videos improve recognition accuracy and reaction time.**
+2. **Before-boundary frames show stronger memory in the natural condition.**
+3. **Event-middle frames show little difference between conditions.**
+
+Additionally, the notebook computes **Recognition Memory Index (REC)** and **Lure Discrimination Index (LDI)** to quantify memory discrimination ability.
+
+
+# Experiment Analysis
+
+```{r}
+library(tidyverse)
+
+# -----------------------------------------
+# Number of participants in each condition
+# -----------------------------------------
+
+participant_count <- data %>%
+  distinct(Subject_id, Condition) %>%
+  count(Condition)
+
+participant_count
+
+
+# -----------------------------------------
+# Frames per participant (BB vs EM)
+# -----------------------------------------
+
+frame_counts <- data %>%
+  group_by(Subject_id, Frames) %>%
+  summarise(
+    n_frames = n(),
+    .groups = "drop"
+  ) %>%
+  pivot_wider(
+    names_from = Frames,
+    values_from = n_frames,
+    values_fill = 0
+  )
+
+frame_counts
+
+
+# -----------------------------------------
+# Optional: total BB and EM counts overall
+# -----------------------------------------
+
+total_frames <- data %>%
+  count(Frames)
+
+total_frames
+```
+
+```{r}
+library(tidyverse)
+
+# Ensure numeric types
+data$confidence <- as.numeric(data$confidence)
+data$accuracy <- as.numeric(data$resp.corr)
+data$rt <- as.numeric(data$resp.rt)
+
+# ------------------------------------------
+# Summary statistics by confidence level
+# ------------------------------------------
+
+confidence_summary <- data %>%
+  group_by(confidence) %>%
+  summarise(
+    n_trials = n(),
+    accuracy_rate = mean(accuracy, na.rm = TRUE),
+    avg_response_time = mean(rt, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(confidence)
+
+print(confidence_summary)
+
+# ------------------------------------------
+# Visualization 1: Accuracy vs Confidence
+# ------------------------------------------
+
+ggplot(confidence_summary, aes(x = confidence, y = accuracy_rate)) +
+  geom_line(size = 1) +
+  geom_point(size = 3) +
+  labs(
+    title = "Recognition Accuracy by Confidence Level",
+    x = "Confidence Rating",
+    y = "Accuracy Rate"
+  ) +
+  theme_minimal()
+
+# ------------------------------------------
+# Visualization 2: Response Time vs Confidence
+# ------------------------------------------
+
+ggplot(confidence_summary, aes(x = confidence, y = avg_response_time)) +
+  geom_line(size = 1) +
+  geom_point(size = 3) +
+  labs(
+    title = "Average Response Time by Confidence Level",
+    x = "Confidence Rating",
+    y = "Average Response Time (seconds)"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+library(tidyverse)
+
+# Ensure proper formats
+data$resp.keys <- as.character(data$resp.keys)
+data$accuracy <- as.numeric(data$resp.corr)
+data$rt <- as.numeric(data$resp.rt)
+data$confidence <- as.numeric(data$confidence)
+
+# ------------------------------------------
+# Summary by response key
+# ------------------------------------------
+
+key_summary <- data %>%
+  group_by(resp.keys) %>%
+  summarise(
+    n_trials = n(),
+    accuracy_rate = mean(accuracy, na.rm = TRUE),
+    avg_response_time = mean(rt, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+print(key_summary)
+
+# ------------------------------------------
+# Most selected confidence level for r and l
+# ------------------------------------------
+
+confidence_mode <- data %>%
+  group_by(resp.keys, confidence) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  group_by(resp.keys) %>%
+  slice_max(n, n = 1)
+
+print(confidence_mode)
+
+# ------------------------------------------
+# Visualization 1: Accuracy by response key
+# ------------------------------------------
+
+ggplot(key_summary, aes(x = resp.keys, y = accuracy_rate, fill = resp.keys)) +
+  geom_bar(stat = "identity") +
+  labs(
+    title = "Accuracy by Response Key",
+    x = "Response Key",
+    y = "Accuracy Rate"
+  ) +
+  theme_minimal()
+
+# ------------------------------------------
+# Visualization 2: Response time by key
+# ------------------------------------------
+
+ggplot(key_summary, aes(x = resp.keys, y = avg_response_time, fill = resp.keys)) +
+  geom_bar(stat = "identity") +
+  labs(
+    title = "Average Response Time by Response Key",
+    x = "Response Key",
+    y = "Average Response Time (seconds)"
+  ) +
+  theme_minimal()
+
+# ------------------------------------------
+# Visualization 3: Confidence distribution
+# ------------------------------------------
+
+ggplot(data, aes(x = factor(confidence), fill = resp.keys)) +
+  geom_bar(position = "dodge") +
+  labs(
+    title = "Confidence Level Distribution by Response Key",
+    x = "Confidence Level",
+    y = "Count"
+  ) +
+  theme_minimal()
+```

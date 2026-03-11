@@ -1,13 +1,25 @@
 library(tidyverse)
 library(stringr)
 
-data <- read.csv("/Users/rohit.rohon01gmail.com/Downloads/data.csv", stringsAsFactors = FALSE)
+# --------------------------------------------------
+# Load combined dataset
+# --------------------------------------------------
 
-clean_psychopy <- function(x) {
+data <- read.csv(
+  "/Users/rohit.rohon01gmail.com/Downloads/combined_recognition_data.csv",
+  check.names = FALSE,
+  stringsAsFactors = FALSE
+)
+
+# --------------------------------------------------
+# Remove PsychoPy brackets and quotes
+# --------------------------------------------------
+
+clean_psychopy <- function(x){
   
-  x <- gsub("\\[|\\]", "", x)     # remove brackets
-  x <- gsub("'", "", x)           # remove quotes
-  x <- gsub("None", NA, x)        # convert None to NA
+  x <- gsub("\\[|\\]", "", x)   # remove []
+  x <- gsub("'", "", x)         # remove quotes
+  x <- gsub("None", NA, x)      # convert None to NA
   
   return(x)
 }
@@ -15,25 +27,66 @@ clean_psychopy <- function(x) {
 data <- data %>%
   mutate(across(everything(), clean_psychopy))
 
+# --------------------------------------------------
+# Convert numeric columns
+# --------------------------------------------------
+
 numeric_cols <- c(
   "thisN","thisTrialN","thisRepN","movie_id",
   "resp.corr","resp.rt","resp.duration",
   "conf_radio.response","conf_radio.rt",
   "recogloop.resp.corr","recogloop.resp.rt",
+  "recogloop.resp.duration",
   "confidence","confidence_rt"
 )
 
 data[numeric_cols] <- lapply(data[numeric_cols], as.numeric)
 
-data$FrameType <- str_extract(data$target_img, "(?<=_)BB|EM")
-
-data$VideoID <- str_extract(data$target_img, "(?<=Vid)\\d+")
-data$VideoID <- as.numeric(data$VideoID)
-
-glimpse(data)
-summary(data)
+# --------------------------------------------------
+# Clean whitespace
+# --------------------------------------------------
 
 data <- data %>%
-  filter(!is.na(resp.rt))
+  mutate(across(where(is.character), trimws))
 
-write.csv(data, "/Users/rohit.rohon01gmail.com/Downloads/cleaned_recognition_data.csv", row.names = FALSE)
+# --------------------------------------------------
+# Ensure factors
+# --------------------------------------------------
+
+data$Condition <- factor(data$`AB/NB`)
+data$participant <- factor(data$Participant)
+
+# --------------------------------------------------
+# Fix frame column
+# --------------------------------------------------
+
+data$Frames <- factor(data$Frames)
+
+# --------------------------------------------------
+# Remove rows with missing accuracy
+# --------------------------------------------------
+
+data <- data %>%
+  filter(!is.na(resp.corr))
+
+# --------------------------------------------------
+# Quick dataset checks
+# --------------------------------------------------
+
+cat("Number of rows:", nrow(data), "\n")
+cat("Number of participants:", length(unique(data$Subject_id)), "\n")
+
+table(data$Condition)
+table(data$Frames)
+
+# --------------------------------------------------
+# Save cleaned dataset
+# --------------------------------------------------
+
+write.csv(
+  data,
+  "/Users/rohit.rohon01gmail.com/Downloads/final_cleaned_recognition_data.csv",
+  row.names = FALSE
+)
+
+cat("Clean dataset saved successfully\n")
